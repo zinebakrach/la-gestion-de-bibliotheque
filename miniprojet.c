@@ -1,0 +1,644 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+// Définition des structures
+typedef struct Livre {
+    int id_livre;
+    char titre[100];
+    char auteur[100];
+    int annee_publication;
+    char categorie[50];
+    struct Livre* next;
+} Livre;
+
+typedef struct Membre {
+    int id;
+    char nom[100];
+    struct Membre* next;
+} Membre;
+
+typedef struct Emprunt {
+    int id;
+    int id_livre;
+    char date_emprunt[11];
+    struct Emprunt* next;
+} Emprunt;
+
+typedef struct Operation {
+    char description[100];
+    struct Operation* next;
+} Operation;
+
+typedef struct Demande {
+    int id;
+    int id_livre;
+    struct Demande* next;
+} Demande;
+
+// Pointeurs vers les têtes des listes chaînées
+Livre* livres = NULL;
+Membre* membres = NULL;
+Emprunt* emprunts = NULL;
+Operation* operations = NULL; // Pile pour l'historique des opérations
+Demande* demandes = NULL; // File pour les demandes de livres
+
+// Fonction d'initialisation (si nécessaire)
+void init() {
+    livres = NULL;
+    membres = NULL;
+    emprunts = NULL;
+    operations = NULL;
+    demandes = NULL;
+}
+
+// Fonctions pour manipuler les livres
+void ajouterLivre(Livre* nouveauLivre) {
+    nouveauLivre->next = livres;
+    livres = nouveauLivre;
+}
+
+void ajouterMembre(Membre* nouveauMembre) {
+    nouveauMembre->next = membres;
+    membres = nouveauMembre;
+}
+
+void supprimerLivre(int id_livre) {
+    Livre* current = livres;
+    Livre* previous = NULL;
+    while (current != NULL && current->id_livre != id_livre) {
+        previous = current;
+        current = current->next;
+    }
+    if (current != NULL) {
+        if (previous == NULL) {
+            livres = current->next;
+        } else {
+            previous->next = current->next;
+        }
+        free(current);
+    }
+}
+
+Livre* chercherLivreParTitre(const char* titre) {
+    Livre* current = livres;
+    while (current != NULL) {
+        if (strcmp(current->titre, titre) == 0) {
+            return current;
+        }
+        current = current->next;
+    }
+    return NULL;
+}
+
+void afficherLivresParCategorie(const char* categorie) {
+    Livre* current = livres;
+    printf("Livres dans la catégorie %s:\n", categorie);
+    while (current != NULL) {
+        if (strcmp(current->categorie, categorie) == 0) {
+            printf("- %s (%s)\n", current->titre, current->auteur);
+        }
+        current = current->next;
+    }
+}
+
+// Fonctions pour manipuler les emprunts
+void emprunterLivre(int id, int id_livre, const char* date_emprunt) {
+    Emprunt* nouvelEmprunt = (Emprunt*)malloc(sizeof(Emprunt));
+    if (!nouvelEmprunt) {
+        printf("Erreur d'allocation de mémoire.\n");
+        return;
+    }
+    nouvelEmprunt->id = id;
+    nouvelEmprunt->id_livre = id_livre;
+    strcpy(nouvelEmprunt->date_emprunt, date_emprunt);
+    nouvelEmprunt->next = emprunts;
+    emprunts = nouvelEmprunt;
+}
+
+void retournerLivre(int id, int id_livre) {
+    Emprunt* current = emprunts;
+    Emprunt* previous = NULL;
+    while (current != NULL && !(current->id == id && current->id_livre == id_livre)) {
+        previous = current;
+        current = current->next;
+    }
+    if (current != NULL) {
+        if (previous == NULL) {
+            emprunts = current->next;
+        } else {
+            previous->next = current->next;
+        }
+        free(current);
+    }
+}
+
+// Fonction de tri (tri à bulles) pour trier les emprunts par date d'emprunt
+void tri_bulles_emprunts() {
+    if (emprunts == NULL) {
+        return;
+    }
+    int swapped;
+    Emprunt* ptr1;
+    Emprunt* lptr = NULL;
+    do {
+        swapped = 0;
+        ptr1 = emprunts;
+        while (ptr1->next != lptr) {
+            if (strcmp(ptr1->date_emprunt, ptr1->next->date_emprunt) > 0) {
+                int temp_id = ptr1->id;
+                int temp_id_livre = ptr1->id_livre;
+                char temp_date[11];
+                strcpy(temp_date, ptr1->date_emprunt);
+
+                ptr1->id = ptr1->next->id;
+                ptr1->id_livre = ptr1->next->id_livre;
+                strcpy(ptr1->date_emprunt, ptr1->next->date_emprunt);
+
+                ptr1->next->id = temp_id;
+                ptr1->next->id_livre = temp_id_livre;
+                strcpy(ptr1->next->date_emprunt, temp_date);
+
+                swapped = 1;
+            }
+            ptr1 = ptr1->next;
+        }
+        lptr = ptr1;
+    } while (swapped);
+}
+
+// Fonction pour afficher les emprunts
+void afficher_emprunts() {
+    tri_bulles_emprunts();
+    Emprunt* current = emprunts;
+    while (current != NULL) {
+        printf("Membre: %d, Livre: %d, Date d'emprunt: %s\n", current->id, current->id_livre, current->date_emprunt);
+        current = current->next;
+    }
+}
+
+// Fonctions pour manipuler les opérations (Pile)
+
+// Empiler une opération
+void empiler_operation(const char* description) {
+    Operation* nouvelleOperation = (Operation*)malloc(sizeof(Operation));
+    if (!nouvelleOperation) {
+        printf("Erreur d'allocation de mémoire.\n");
+        return;
+    }
+    strcpy(nouvelleOperation->description, description);
+    nouvelleOperation->next = operations;
+    operations = nouvelleOperation;
+}
+
+// Dépiler une opération
+void depiler_operation() {
+    if (operations != NULL) {
+        Operation* temp = operations;
+        operations = operations->next;
+        free(temp);
+    }
+}
+
+// Afficher l'historique des opérations
+void afficher_operations() {
+    Operation* current = operations;
+    printf("Historique des opérations:\n");
+    while (current != NULL) {
+        printf("%s\n", current->description);
+        current = current->next;
+    }
+}
+
+// Fonctions pour manipuler les demandes de livres (File)
+
+// Ajouter une demande de livre à la file
+void ajouter_demande(int id, int id_livre) {
+    Demande* nouvelleDemande = (Demande*)malloc(sizeof(Demande));
+    if (!nouvelleDemande) {
+        printf("Erreur d'allocation de mémoire.\n");
+        return;
+    }
+    nouvelleDemande->id = id;
+    nouvelleDemande->id_livre = id_livre;
+    nouvelleDemande->next = NULL;
+    if (demandes == NULL) {
+        demandes = nouvelleDemande;
+    } else {
+        Demande* current = demandes;
+        while (current->next != NULL) {
+            current = current->next;
+        }
+        current->next = nouvelleDemande;
+    }
+}
+
+// Traiter une demande de livre
+void traiter_demande() {
+    if (demandes != NULL) {
+        Demande* temp = demandes;
+        demandes = demandes->next;
+        free(temp);
+    }
+}
+
+// Afficher les demandes de livres
+void afficher_demandes() {
+    Demande* current = demandes;
+    printf("Demandes de livres:\n");
+    while (current != NULL) {
+        printf("Membre: %d, Livre: %d\n", current->id, current->id_livre);
+        current = current->next;
+    }
+}
+
+// Fonction pour afficher le menu et obtenir le choix de l'utilisateur
+void afficher_menu() {
+    printf("\nMenu:\n");
+    printf("0. Ajouter un membre\n");
+    printf("1. Ajouter un livre\n");
+    printf("2. Supprimer un livre\n");
+    printf("3. Afficher les livres par catégorie\n");
+    printf("4. Rechercher un livre par titre\n");
+    printf("5. Emprunter un livre\n");
+    printf("6. Retourner un livre\n");
+    printf("7. Afficher les emprunts\n");
+    printf("8. Ajouter une demande de livre\n");
+    printf("9. Traiter une demande de livre\n");
+    printf("10. Afficher les demandes de livres\n");
+    printf("11. Afficher l'historique des opérations\n");
+    printf("12. Quitter\n");
+    printf("Choisissez une option: ");
+}
+
+// Fonctions pour gérer les fichiers
+void sauvegarderLivres() {
+    FILE* fichier = fopen("livres.txt", "w");
+    if (fichier == NULL) {
+        printf("Erreur lors de l'ouverture du fichier.\n");
+        return;
+    }
+    Livre* current = livres;
+    while (current != NULL) {
+        fprintf(fichier, "%d|%s|%s|%d|%s\n", current->id_livre, current->titre, current->auteur, current->annee_publication, current->categorie);
+        current = current->next;
+    }
+    fclose(fichier);
+}
+
+void chargerLivres() {
+    FILE* fichier = fopen("livres.txt", "r");
+    if (fichier == NULL) {
+        printf("Erreur lors de l'ouverture du fichier.\n");
+        return;
+    }
+    while (!feof(fichier)) {
+        Livre* nouveauLivre = (Livre*)malloc(sizeof(Livre));
+        if (fscanf(fichier, "%d|%[^|]|%[^|]|%d|%[^\n]\n", &nouveauLivre->id_livre, nouveauLivre->titre, nouveauLivre->auteur, &nouveauLivre->annee_publication, nouveauLivre->categorie) == 5) {
+            ajouterLivre(nouveauLivre);
+        } else {
+            free(nouveauLivre);
+        }
+    }
+    fclose(fichier);
+}
+
+void sauvegarderMembres() {
+    FILE* fichier = fopen("membres.txt", "w");
+    if (fichier == NULL) {
+        printf("Erreur lors de l'ouverture du fichier.\n");
+        return;
+    }
+    Membre* current = membres;
+    while (current != NULL) {
+        fprintf(fichier, "%d|%s\n", current->id, current->nom);
+        current = current->next;
+    }
+    fclose(fichier);
+}
+
+void chargerMembres() {
+    FILE* fichier = fopen("membres.txt", "r");
+    if (fichier == NULL) {
+        printf("Erreur lors de l'ouverture du fichier.\n");
+        return;
+    }
+    while (!feof(fichier)) {
+        Membre* nouveauMembre = (Membre*)malloc(sizeof(Membre));
+        if (fscanf(fichier, "%d|%[^\n]\n", &nouveauMembre->id, nouveauMembre->nom) == 2) {
+            nouveauMembre->next = membres;
+            membres = nouveauMembre;
+        } else {
+            free(nouveauMembre);
+        }
+    }
+    fclose(fichier);
+}
+
+void sauvegarderEmprunts() {
+    FILE* fichier = fopen("emprunts.txt", "w");
+    if (fichier == NULL) {
+        printf("Erreur lors de l'ouverture du fichier.\n");
+        return;
+    }
+    Emprunt* current = emprunts;
+    while (current != NULL) {
+        fprintf(fichier, "%d|%d|%s\n", current->id, current->id_livre, current->date_emprunt);
+        current = current->next;
+    }
+    fclose(fichier);
+}
+
+void chargerEmprunts() {
+    FILE* fichier = fopen("emprunts.txt", "r");
+    if (fichier == NULL) {
+        printf("Erreur lors de l'ouverture du fichier.\n");
+        return;
+    }
+    while (!feof(fichier)) {
+        Emprunt* nouvelEmprunt = (Emprunt*)malloc(sizeof(Emprunt));
+        if (fscanf(fichier, "%d|%d|%[^\n]\n", &nouvelEmprunt->id, &nouvelEmprunt->id_livre, nouvelEmprunt->date_emprunt) == 3) {
+            nouvelEmprunt->next = emprunts;
+            emprunts = nouvelEmprunt;
+        } else {
+            free(nouvelEmprunt);
+        }
+    }
+    fclose(fichier);
+}
+
+void sauvegarderOperations() {
+    FILE* fichier = fopen("operations.txt", "w");
+    if (fichier == NULL) {
+        printf("Erreur lors de l'ouverture du fichier.\n");
+        return;
+    }
+    Operation* current = operations;
+    while (current != NULL) {
+        fprintf(fichier, "%s\n", current->description);
+        current = current->next;
+    }
+    fclose(fichier);
+}
+
+void chargerOperations() {
+    FILE* fichier = fopen("operations.txt", "r");
+    if (fichier == NULL) {
+        printf("Erreur lors de l'ouverture du fichier.\n");
+        return;
+    }
+    while (!feof(fichier)) {
+        Operation* nouvelleOperation = (Operation*)malloc(sizeof(Operation));
+        if (fgets(nouvelleOperation->description, 100, fichier) != NULL) {
+            nouvelleOperation->description[strcspn(nouvelleOperation->description, "\n")] = '\0';  // Enlever le caractère de nouvelle ligne
+            nouvelleOperation->next = operations;
+            operations = nouvelleOperation;
+        } else {
+            free(nouvelleOperation);
+        }
+    }
+    fclose(fichier);
+}
+
+void sauvegarderDemandes() {
+    FILE* fichier = fopen("demandes.txt", "w");
+    if (fichier == NULL) {
+        printf("Erreur lors de l'ouverture du fichier.\n");
+        return;
+    }
+    Demande* current = demandes;
+    while (current != NULL) {
+        fprintf(fichier, "%d|%d\n", current->id, current->id_livre);
+        current = current->next;
+    }
+    fclose(fichier);
+}
+
+void chargerDemandes() {
+    FILE* fichier = fopen("demandes.txt", "r");
+    if (fichier == NULL) {
+        printf("Erreur lors de l'ouverture du fichier.\n");
+        return;
+    }
+    while (!feof(fichier)) {
+        Demande* nouvelleDemande = (Demande*)malloc(sizeof(Demande));
+        if (fscanf(fichier, "%d|%d\n", &nouvelleDemande->id, &nouvelleDemande->id_livre) == 2) {
+            nouvelleDemande->next = NULL;
+            if (demandes == NULL) {
+                demandes = nouvelleDemande;
+            } else {
+                Demande* current = demandes;
+                while (current->next != NULL) {
+                    current = current->next;
+                }
+                current->next = nouvelleDemande;
+            }
+        } else {
+            free(nouvelleDemande);
+        }
+    }
+    fclose(fichier);
+}
+
+// Fonction pour nettoyer la mémoire avant de quitter
+void libererMemoire() {
+    while (livres != NULL) {
+        Livre* temp = livres;
+        livres = livres->next;
+        free(temp);
+    }
+    while (membres != NULL) {
+        Membre* temp = membres;
+        membres = membres->next;
+        free(temp);
+    }
+    while (emprunts != NULL) {
+        Emprunt* temp = emprunts;
+        emprunts = emprunts->next;
+        free(temp);
+    }
+    while (operations != NULL) {
+        Operation* temp = operations;
+        operations = operations->next;
+        free(temp);
+    }
+    while (demandes != NULL) {
+        Demande* temp = demandes;
+        demandes = demandes->next;
+        free(temp);
+    }
+}
+
+// Main pour tester les fonctions
+int main() {
+    int choix;
+    init();
+
+    chargerLivres();
+    chargerMembres();
+    chargerEmprunts();
+    chargerOperations();
+    chargerDemandes();
+
+    do {
+        afficher_menu();
+        scanf("%d", &choix);
+        getchar();  // Pour consommer le caractère de nouvelle ligne après scanf
+
+        switch (choix) {
+            case 0: {
+                Membre* nouveauMembre = (Membre*)malloc(sizeof(Membre));
+                if (!nouveauMembre) {
+                    printf("Erreur d'allocation de mémoire.\n");
+                    break;
+                }
+                printf("Entrer l'ID du membre: ");
+                scanf("%d", &nouveauMembre->id);
+                getchar();
+                printf("Entrer le nom du membre: ");
+                fgets(nouveauMembre->nom, 100, stdin);
+                nouveauMembre->nom[strcspn(nouveauMembre->nom, "\n")] = '\0';  // Enlever le caractère de nouvelle ligne
+                ajouterMembre(nouveauMembre);
+                empiler_operation("Ajout d'un membre"); // Enregistrer l'opération
+                sauvegarderMembres();
+                sauvegarderOperations();
+                break;
+            }
+            case 1: {
+                Livre* nouveauLivre = (Livre*)malloc(sizeof(Livre));
+                if (!nouveauLivre) {
+                    printf("Erreur d'allocation de mémoire.\n");
+                    break;
+                }
+                printf("Entrer l'ID du livre: ");
+                scanf("%d", &nouveauLivre->id_livre);
+                getchar();
+                printf("Entrer le titre du livre: ");
+                fgets(nouveauLivre->titre, 100, stdin);
+                nouveauLivre->titre[strcspn(nouveauLivre->titre, "\n")] = '\0';  // Enlever le caractère de nouvelle ligne
+                printf("Entrer l'auteur du livre: ");
+                fgets(nouveauLivre->auteur, 100, stdin);
+                nouveauLivre->auteur[strcspn(nouveauLivre->auteur, "\n")] = '\0';
+                printf("Entrer l'année de publication: ");
+                scanf("%d", &nouveauLivre->annee_publication);
+                getchar();
+                printf("Entrer la catégorie du livre: ");
+                fgets(nouveauLivre->categorie, 50, stdin);
+                nouveauLivre->categorie[strcspn(nouveauLivre->categorie, "\n")] = '\0';
+                nouveauLivre->next = NULL;
+                ajouterLivre(nouveauLivre);
+                empiler_operation("Ajout d'un livre"); // Enregistrer l'opération
+                sauvegarderLivres();
+                sauvegarderOperations();
+                break;
+            }
+            case 2: {
+                int id_livre;
+                printf("Entrer l'ID du livre à supprimer: ");
+                scanf("%d", &id_livre);
+                supprimerLivre(id_livre);
+                empiler_operation("Suppression d'un livre"); // Enregistrer l'opération
+                sauvegarderLivres();
+                sauvegarderOperations();
+                break;
+            }
+            case 3: {
+                char categorie[50];
+                printf("Entrer la catégorie: ");
+                fgets(categorie, 50, stdin);
+                categorie[strcspn(categorie, "\n")] = '\0';
+                afficherLivresParCategorie(categorie);
+                break;
+            }
+            case 4: {
+                char titre[100];
+                printf("Entrer le titre du livre: ");
+                fgets(titre, 100, stdin);
+                titre[strcspn(titre, "\n")] = '\0';
+                Livre* livre = chercherLivreParTitre(titre);
+                if (livre != NULL) {
+                    printf("Livre trouvé : %s (%s)\n", livre->titre, livre->auteur);
+                } else {
+                    printf("Livre non trouvé\n");
+                }
+                break;
+            }
+            case 5: {
+                int id, id_livre;
+                char date_emprunt[11];
+                printf("Entrer l'ID du membre: ");
+                scanf("%d", &id);
+                printf("Entrer l'ID du livre: ");
+                scanf("%d", &id_livre);
+                getchar();
+                printf("Entrer la date d'emprunt (YYYY-MM-DD): ");
+                fgets(date_emprunt, 11, stdin);
+                date_emprunt[strcspn(date_emprunt, "\n")] = '\0';
+                emprunterLivre(id, id_livre, date_emprunt);
+                empiler_operation("Emprunt d'un livre"); // Enregistrer l'opération
+                sauvegarderEmprunts();
+                sauvegarderOperations();
+                break;
+            }
+            case 6: {
+                int id, id_livre;
+                printf("Entrer l'ID du membre: ");
+                scanf("%d", &id);
+                printf("Entrer l'ID du livre: ");
+                scanf("%d", &id_livre);
+                retournerLivre(id, id_livre);
+                empiler_operation("Retour d'un livre"); // Enregistrer l'opération
+                sauvegarderEmprunts();
+                sauvegarderOperations();
+                break;
+            }
+            case 7: {
+                afficher_emprunts();
+                break;
+            }
+            case 8: {
+                int id, id_livre;
+                printf("Entrer l'ID du membre: ");
+                scanf("%d", &id);
+                printf("Entrer l'ID du livre: ");
+                scanf("%d", &id_livre);
+                ajouter_demande(id, id_livre);
+                empiler_operation("Ajout d'une demande de livre"); // Enregistrer l'opération
+                sauvegarderDemandes();
+                sauvegarderOperations();
+                break;
+            }
+            case 9: {
+                traiter_demande();
+                empiler_operation("Traitement d'une demande de livre"); // Enregistrer l'opération
+                sauvegarderDemandes();
+                sauvegarderOperations();
+                break;
+            }
+            case 10: {
+                afficher_demandes();
+                break;
+            }
+            case 11: {
+                afficher_operations();
+                break;
+            }
+            case 12: {
+                printf("Quitter le programme.\n");
+                break;
+            }
+            default: {
+                printf("Option invalide. Veuillez réessayer.\n");
+                break;
+            }
+        }
+    } while (choix != 12);
+
+    sauvegarderLivres();
+    sauvegarderMembres();
+    sauvegarderEmprunts();
+    sauvegarderOperations();
+    sauvegarderDemandes();
+    libererMemoire();  // Nettoyer la mémoire avant de quitter
+    return 0;
+}
